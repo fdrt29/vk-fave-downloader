@@ -3,8 +3,8 @@ __author__ = "Fedor Teleshov <fdrt29@gmail.com>"
 __copyright__ = "Copyright 2021"
 
 import sys
-from pprint import pprint
 
+import requests
 import vk_api
 
 
@@ -37,29 +37,51 @@ def auth(login, password):
     return vk_session.get_api()
 
 
-def process_post(post):
-    pprint(post)
-
-
 def get_tag_id(tag_name: str, vk) -> int:
     response = vk.fave.getTags()
     for item in response['items']:
         if item["name"] == tag_name:
             return int(item["id"])
-    return 0
+    raise ValueError('Could not find a tag with the same name')
+
+
+def process_item(item):
+    urls = list()
+    for attachment in item['post']['attachments']:
+        if not attachment['photo']:
+            return
+        urls.append(get_maximum_image(attachment['photo'])['url'])
+    download_images(urls)
+    # pprint(item)
+
+
+def get_maximum_image(photo):
+    return max(photo['sizes'], key=lambda p: p['height'])
+
+
+def download_images(urls: list):
+    counter = 0
+    for url in urls:
+        img_data = requests.get(url).content
+        with open('{0}.jpg'.format(str(counter)), 'wb') as handler:
+            handler.write(img_data)
+        counter += 1
 
 
 def main():
     login, password = sys.argv[1:3]
     vk = auth(login, password)
 
-    my_tag_id = get_tag_id("References", vk)
-    if my_tag_id == 0:
-        raise ValueError('Could not find a tag with the same name')
-    response = vk.fave.get(tag_id=my_tag_id, count=4)
-    pprint(response)
-    # for post in response['items']:
-    #     process_post(post)
+    try:
+        my_tag_id = get_tag_id("References", vk)
+    except Exception as e:
+        print(e)
+        return
+
+    response = vk.fave.get(tag_id=my_tag_id, count=1)
+    # pprint(response)
+    for item in response['items']:
+        process_item(item)
 
 
 if __name__ == '__main__':
